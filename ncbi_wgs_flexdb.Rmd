@@ -1,0 +1,227 @@
+---
+title: "NCBI Sequence stats"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+
+
+    
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(lubridate)
+library(rvest)
+library(plotly)
+library(forcats)
+library(TidyWrappers)
+```
+
+```{r global , include=FALSE}
+
+html_page <- read_html("https://www.ncbi.nlm.nih.gov/genbank/statistics/")
+ncbi_dat <- rvest::html_table(html_page) 
+ncbi_dat <- ncbi_dat %>% .[[1]]   
+colnames(ncbi_dat)  <- c("release","date","genebank_bases" , "genebank_sequence" ,"wgs_bases","wgs_sequence")
+ncbi_dat  <- ncbi_dat %>% as_tibble() 
+
+ncbi_dat <- ncbi_dat %>% dplyr::slice(-1) %>% readr::type_convert()
+
+## add dummy day (1st of correponding month) in date column and convert into date datatype
+
+ncbi_dat <- ncbi_dat %>% dplyr::mutate(date = paste("1" , date))  %>% 
+  dplyr::mutate(date = lubridate::dmy(date))
+
+## NOTE: make sure you donot use day anywhere as it is dummy 
+
+latest_release_number <- ncbi_dat %>% pull(release) %>% dplyr::last()
+latest_release_date <- ncbi_dat %>% pull(date) %>% max()
+latest_release_date_my <- paste(month(latest_release_date,label = TRUE ) , year(latest_release_date ),sep = "-" )
+```
+genebank
+====================================================
+
+Row
+-------------------------------------
+    
+### Genebank current release
+
+```{r}
+valueBox(value = latest_release_number ,caption = "Genebank current release",icon = "fa-tag")
+```
+
+### Genebank current release date
+
+```{r}
+valueBox(value =  latest_release_date_my ,
+         caption = "Genebank current release date" , 
+         icon = "fa-calendar")
+```
+
+### Total number of genebank releases 
+
+```{r}
+valueBox(value = ncbi_dat %>% nrow() ,caption = "Total number of genebank releases")
+```
+
+### Number of genebank sequences
+```{r}
+valueBox(value = ncbi_dat %>% pull(genebank_sequence) %>% max(na.rm = T) ,caption = "Number of genebank sequences", icon = "fa-align-left")
+```
+
+
+### Number of genebank bases
+
+```{r}
+valueBox(value = ncbi_dat %>% pull(genebank_bases) %>% max(na.rm = T) ,caption = "Number of genebank bases")
+```
+   
+Row
+-------------------------------------
+    
+### Number of bases over years
+
+```{r}
+gp <- ncbi_dat %>% ggplot(aes(x = date, y = genebank_bases)) + geom_line() +
+  theme_bw() + ylab("Number of bases")
+
+ggplotly(gp)
+
+```
+
+### Number of sequences over years
+
+```{r}
+gp <- ncbi_dat %>% 
+  ggplot(aes(x = date, y = genebank_sequence)) + geom_line() +
+  theme_bw()  + ylab("Number of sequences")
+ggplotly(gp)
+
+```
+
+Row
+-------------------------------------
+    
+### Number of releases per year 
+    
+```{r}
+gp <- ncbi_dat %>% pull(date) %>% year() %>% table() %>% as_tibble() %>% 
+  dplyr::rename(c(year = `.` , count = n)) %>%
+  ggplot(aes(x = year , y = count)) + geom_point() +
+    theme_bw() + theme(axis.text.x = element_text(angle = 90)) + ylab("Number of releases")
+  
+ggplotly(gp)
+```
+    
+### Number of releases by month
+
+```{r}
+gp <- ncbi_dat %>% pull(date) %>% month(label = TRUE) %>% table() %>% as_tibble() %>%
+  dplyr::rename(c(month = `.` , count = n)) %>% 
+  dplyr::mutate(month = forcats::as_factor(month)) %>%
+  ggplot(aes(x = month,  y = count, fill = count)) + geom_bar(stat = "identity") + theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90))
+
+ggplotly(gp)
+
+```
+
+
+
+
+
+wgs
+====================================================
+
+Row
+-------------------------------------
+
+### wgs current release
+
+```{r}
+valueBox(value = latest_release_number ,caption = "wgs current release",icon = "fa-tag")
+```
+
+### wgs current release date
+
+```{r}
+valueBox(value = latest_release_date_my ,caption = "wgs current release date" , 
+         icon = "fa-calendar")
+```
+
+
+### Total number of genebank releases
+
+```{r}
+valueBox(value = ncbi_dat %>% na.omit() %>% nrow() ,
+         caption = "Total number of wgs releases" , icon = "fa-sigma")
+```
+
+### Number of wgs sequences
+
+```{r}
+valueBox(value = ncbi_dat %>% pull(wgs_sequence) %>% max(na.rm = T) ,caption = "Number of wgs sequences",icon = "fa-align-left")
+```
+
+### Number of wgs bases
+
+```{r}
+valueBox(value = ncbi_dat %>% pull(wgs_bases) %>% max(na.rm = T) ,caption = "Number of wgs bases")
+```
+
+Row
+-------------------------------------
+    
+### Number of bases over years
+
+```{r}
+gp <- ncbi_dat %>% TidyWrappers::tbl_remove_rows_NA_any() %>% 
+  ggplot(aes(x = date, y = wgs_bases)) + geom_line() +
+  theme_bw() + ylab("Number of bases")
+
+ggplotly(gp)
+
+```
+
+### Number of sequences over years
+
+```{r}
+gp <- ncbi_dat %>% TidyWrappers::tbl_remove_rows_NA_any() %>%
+  ggplot(aes(x = date, y = wgs_sequence)) + geom_line() +
+  theme_bw()  + ylab("Number of sequences")
+ggplotly(gp)
+
+```
+
+Row
+-------------------------------------
+    
+### Number of releases per year 
+    
+```{r}
+gp <- ncbi_dat %>% TidyWrappers::tbl_remove_rows_NA_any()%>% 
+  pull(date) %>% year() %>% table() %>% as_tibble() %>% 
+  dplyr::rename(c(year = `.` , count = n)) %>%
+  ggplot(aes(x = year , y = count)) + geom_point() +
+    theme_bw() + theme(axis.text.x = element_text(angle = 90)) + ylab("Number of releases")
+  
+ggplotly(gp)
+```
+    
+### Number of releases by month
+
+```{r}
+gp2 <- ncbi_dat %>% TidyWrappers::tbl_remove_rows_NA_any()%>% 
+  pull(date) %>% 
+  month(label = TRUE) %>% table() %>% as_tibble() %>%
+  dplyr::rename(c(month = `.` , count = n)) %>% 
+  dplyr::mutate(month = forcats::as_factor(month)) %>%
+  ggplot(aes(x = month,  y = count, fill = count)) + geom_bar(stat = "identity") + theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90))
+
+plotly::ggplotly(gp2)
+```
+
+
